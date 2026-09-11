@@ -4,23 +4,16 @@ import Image from "next/image";
 import Link from "next/link";
 import axios from "axios";
 import { useState } from "react";
+import { useDispatch } from "react-redux";
+import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { API_ENDPOINTS } from "@/lib/api";
-import { uploadDeliveryDoc } from "@/lib/s3Upload";
 import { AuthThemeToggle } from "@/app/components/ThemeToggle";
 import AddressLocationPicker from "@/app/components/AddressLocationPicker";
 import GoogleMapsLoader from "@/app/components/GoogleMapsLoader";
 import { getAddress, getDeviceLocation } from "@/services/address";
 import type { Address } from "@/store/types/address";
-
-const VEHICLE_TYPES = [
-  { value: "bike", label: "Bike" },
-  { value: "car", label: "Car" },
-  { value: "truck", label: "Truck" },
-  { value: "other", label: "Other" },
-] as const;
-
-type VehicleType = (typeof VEHICLE_TYPES)[number]["value"];
+import { setAgent } from "@/store/slices/authSlice";
 
 const emptyAddress: Address = {
   formatted: "",
@@ -33,152 +26,113 @@ const emptyAddress: Address = {
   landmark: "",
 };
 
+type PickerTarget = "home" | "work" | null;
+
 export default function RegisterPage() {
-  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [address, setAddress] = useState<Address>(emptyAddress);
+  const router = useRouter();
+  const dispatch = useDispatch();
+
   const [formdata, setFormdata] = useState({
     name: "",
     contact: "",
     email: "",
     password: "",
-    vehicleType: "bike" as VehicleType,
-    vehicleNumber: "",
-    workingRadius: "20",
   });
-  const [rcFile, setRcFile] = useState<File | null>(null);
-  const [licenseFile, setLicenseFile] = useState<File | null>(null);
-  const [rcPreview, setRcPreview] = useState("");
-  const [licensePreview, setLicensePreview] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [homeLocation, setHomeLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [homeAddress, setHomeAddress] = useState<Address>(emptyAddress);
+  const [workSameAsHome, setWorkSameAsHome] = useState(true);
+  const [workLocation, setWorkLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [workAddress, setWorkAddress] = useState<Address>(emptyAddress);
+  const [pickerTarget, setPickerTarget] = useState<PickerTarget>(null);
   const [isLoadingAddress, setIsLoadingAddress] = useState(false);
-  const [showMapPicker, setShowMapPicker] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const inputClass =
     "h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white dark:placeholder:text-zinc-500";
-  const disabledInputClass =
-    "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-500";
 
-  const applyPickedLocation = (lat: number, lng: number, nextAddress: Address) => {
-    setLocation({ lat, lng });
-    setAddress({
-      ...emptyAddress,
-      ...nextAddress,
-      landmark: address.landmark,
-    });
+  const applyHome = (lat: number, lng: number, next: Address) => {
+    setHomeLocation({ lat, lng });
+    setHomeAddress({ ...emptyAddress, ...next });
+    if (workSameAsHome) {
+      setWorkLocation({ lat, lng });
+      setWorkAddress({ ...emptyAddress, ...next });
+    }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormdata({ ...formdata, [e.target.name]: e.target.value });
+  const applyWork = (lat: number, lng: number, next: Address) => {
+    setWorkLocation({ lat, lng });
+    setWorkAddress({ ...emptyAddress, ...next });
   };
 
-  const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setAddress({ ...address, [e.target.name]: e.target.value });
-  };
-
-  const handleUseCurrentLocation = async () => {
+  const handleUseCurrent = async (target: "home" | "work") => {
     setIsLoadingAddress(true);
     try {
       await waitForGoogleGeocoder();
       const coords = await getDeviceLocation();
       const addressData = await getAddress(coords);
-      if (!addressData) {
-        applyPickedLocation(coords.lat, coords.lng, emptyAddress);
-        toast.error("Got GPS, but reverse geocode failed. Fill address fields or pick on the map.");
-        return;
-      }
-      applyPickedLocation(coords.lat, coords.lng, addressData);
-      toast.success("Current location applied");
+      const next = addressData || emptyAddress;
+      if (target === "home") applyHome(coords.lat, coords.lng, next);
+      else applyWork(coords.lat, coords.lng, next);
+      if (!addressData) toast.error("Got GPS — fill address fields or use map.");
+      else toast.success("Location applied");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to fetch current location");
+      toast.error(error instanceof Error ? error.message : "Unable to fetch location");
     } finally {
       setIsLoadingAddress(false);
     }
   };
 
-  const handleFile = (kind: "rc" | "license", file: File | null) => {
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    if (kind === "rc") {
-      setRcFile(file);
-      setRcPreview(url);
-    } else {
-      setLicenseFile(file);
-      setLicensePreview(url);
-    }
-  };
-
   const handleSubmit = async () => {
     if (isSubmitting) return;
-
     if (!formdata.name || !formdata.contact || !formdata.email || !formdata.password) {
-      toast.error("Fill name, contact, email, and password");
+      toast.error("Fill name, mobile, email and password");
       return;
     }
-    if (!location) {
-      toast.error("Set your location with current location or the map");
+    if (!homeLocation || !isAddressReady(homeAddress)) {
+      toast.error("Set a complete home address");
       return;
     }
-    if (!address.formatted || !address.state || !address.city || !address.pincode) {
-      toast.error("Address needs full address, city, state, and pincode");
-      return;
-    }
-    if (!formdata.vehicleNumber) {
-      toast.error("Vehicle number is required");
-      return;
-    }
-    if (!rcFile || !licenseFile) {
-      toast.error("Upload RC photo and license photo");
+    if (!workSameAsHome && (!workLocation || !isAddressReady(workAddress))) {
+      toast.error("Set a complete work address, or mark same as home");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const [vehicleRcPhoto, licensePhoto] = await Promise.all([
-        uploadDeliveryDoc(rcFile),
-        uploadDeliveryDoc(licenseFile),
-      ]);
-
-      const response = await axios.post(
+      const res = await axios.post(
         API_ENDPOINTS.SIGNUP,
         {
           name: formdata.name.trim(),
           contact: formdata.contact.trim(),
           email: formdata.email.trim(),
           password: formdata.password,
-          location: { lat: location.lat, lng: location.lng },
-          address: {
-            formatted: address.formatted,
-            line1: address.line1 || address.formatted,
-            state: address.state,
-            city: address.city,
-            pincode: address.pincode,
-            area: address.area,
-            landmark: address.landmark || undefined,
-          },
-          vehicleDetails: {
-            vehicleType: formdata.vehicleType,
-            vehicleNumber: formdata.vehicleNumber.trim(),
-            vehicleRcPhoto,
-            licensePhoto,
-          },
-          workingRadius: Number(formdata.workingRadius) || 20,
+          homeLocation,
+          homeAddress: payloadAddress(homeAddress),
+          workSameAsHome,
+          ...(workSameAsHome
+            ? {}
+            : {
+                location: workLocation,
+                address: payloadAddress(workAddress),
+              }),
+          workingRadius: 20,
         },
-        { withCredentials: true },
+        { withCredentials: true }
       );
 
-      if (response.data.success) {
-        setSubmitted(true);
-        toast.success("Registration submitted. Waiting for Super Admin approval.");
+      if (res.data.success && res.data.agent) {
+        dispatch(setAgent(res.data.agent));
+        toast.success("Account created — complete KYC on Profile to take jobs.");
+        router.push("/home");
       } else {
-        toast.error(response.data.message || "Registration failed");
+        toast.error(res.data.message || "Registration failed");
       }
     } catch (error: unknown) {
-      const errorMessage =
+      toast.error(
         axios.isAxiosError(error) && error.response?.data?.message
           ? error.response.data.message
-          : "Error submitting registration. Please try again.";
-      toast.error(errorMessage);
+          : "Registration failed"
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -188,7 +142,7 @@ export default function RegisterPage() {
     <main className="min-h-dvh bg-[#f5f7fb] text-slate-950 dark:bg-zinc-950 dark:text-white">
       <GoogleMapsLoader />
       <AuthThemeToggle />
-      <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 pb-12 sm:px-6">
+      <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 pb-12 sm:px-6">
         <div className="flex items-center justify-between gap-4">
           <Link href="/login" className="inline-flex rounded-lg bg-white px-3 py-2 shadow-sm ring-1 ring-slate-200">
             <Image src="/shopzo_logo.png" alt="Shopzo" width={112} height={42} priority className="h-auto w-auto" />
@@ -198,277 +152,176 @@ export default function RegisterPage() {
           </Link>
         </div>
 
-        {submitted ? (
-          <div className="rounded-3xl border border-slate-200/80 bg-white p-8 shadow-sm dark:border-white/10 dark:bg-zinc-900">
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">
-              Request sent
-            </p>
-            <h1 className="mt-3 text-3xl font-semibold">Waiting for approval</h1>
-            <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-zinc-400">
-              Super Admin will review your delivery partner account. You can sign in after approval.
-            </p>
-            <Link
-              href="/login"
-              className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl bg-emerald-600 text-sm font-semibold text-white hover:bg-emerald-700"
-            >
-              Back to sign in
-            </Link>
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">
+            Quick start
+          </p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight">Create partner account</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-zinc-400">
+            Minimum details only. Aadhaar + vehicle docs come after login on Profile.
+          </p>
+
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <Field label="Full name" name="name" value={formdata.name} onChange={(v) => setFormdata((s) => ({ ...s, name: v }))} className={inputClass} />
+            <Field label="Mobile" name="contact" value={formdata.contact} onChange={(v) => setFormdata((s) => ({ ...s, contact: v }))} className={inputClass} />
+            <Field label="Email" name="email" type="email" value={formdata.email} onChange={(v) => setFormdata((s) => ({ ...s, email: v }))} className={inputClass} />
+            <Field label="Password" name="password" type="password" value={formdata.password} onChange={(v) => setFormdata((s) => ({ ...s, password: v }))} className={inputClass} />
           </div>
-        ) : (
-          <>
-            <div className="rounded-3xl border border-slate-200/80 bg-gradient-to-r from-white to-emerald-50/70 px-6 py-6 shadow-sm dark:border-zinc-800 dark:from-zinc-900/70 dark:to-zinc-900/30">
-              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Register as delivery partner</h1>
-              <p className="mt-2 max-w-2xl text-[0.9375rem] leading-relaxed text-slate-600 dark:text-zinc-400">
-                Use current location or pick another pin on the map. Address fills from reverse geocoding. Login stays
-                locked until Super Admin approves.
-              </p>
-            </div>
 
-            <div className="relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-[0_12px_35px_rgba(15,23,42,0.12)] dark:border-zinc-800 dark:bg-zinc-900">
-              {isLoadingAddress ? (
-                <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/95 backdrop-blur-sm dark:bg-zinc-900/95">
-                  <div className="text-center">
-                    <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
-                    <p className="text-sm font-semibold">Fetching address details...</p>
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="space-y-6 p-6 md:p-7">
-                <section className="space-y-5">
-                  <h2 className="text-base font-semibold">Partner details</h2>
-                  <Field label="Full name" required name="name" value={formdata.name} onChange={handleChange} className={inputClass} />
-                  <Field
-                    label="Contact number"
-                    required
-                    name="contact"
-                    value={formdata.contact}
-                    onChange={handleChange}
-                    className={inputClass}
-                    maxLength={10}
-                    placeholder="10 digit mobile number"
-                  />
-                  <Field
-                    label="Email"
-                    required
-                    name="email"
-                    type="email"
-                    value={formdata.email}
-                    onChange={handleChange}
-                    className={inputClass}
-                    placeholder="you@partner.com"
-                  />
-                  <Field
-                    label="Password"
-                    required
-                    name="password"
-                    type="password"
-                    value={formdata.password}
-                    onChange={handleChange}
-                    className={inputClass}
-                    placeholder="Set login password"
-                  />
-                </section>
-
-                <section className="space-y-4 border-t border-slate-200/80 pt-6 dark:border-zinc-800">
-                  <div>
-                    <h2 className="text-base font-semibold">Service location</h2>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-zinc-400">
-                      Current location fills the form. Choose another location to search or drop a pin.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <button
-                      type="button"
-                      onClick={handleUseCurrentLocation}
-                      disabled={isLoadingAddress}
-                      className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-                    >
-                      Use current location
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowMapPicker(true)}
-                      className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-800 dark:border-zinc-700 dark:text-zinc-200"
-                    >
-                      Choose another location
-                    </button>
-                  </div>
-
-                  {location ? (
-                    <p className="rounded-xl bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200">
-                      Pin: {location.lat.toFixed(6)}, {location.lng.toFixed(6)}
-                    </p>
-                  ) : (
-                    <p className="rounded-xl bg-amber-50 px-4 py-2.5 text-xs font-semibold text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-                      Location is required.
-                    </p>
-                  )}
-
-                  <div>
-                    <label className="mb-2 block text-sm font-medium">
-                      Full address <span className="text-red-500">*</span>
-                    </label>
-                    <textarea
-                      name="formatted"
-                      value={address.formatted}
-                      onChange={handleAddressChange}
-                      rows={3}
-                      disabled={isLoadingAddress}
-                      className={`w-full resize-none rounded-xl border px-3 py-2.5 text-sm shadow-sm ${
-                        isLoadingAddress
-                          ? disabledInputClass
-                          : "border-slate-300 bg-white text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
-                      }`}
-                      placeholder="Address will be auto-filled"
-                    />
-                  </div>
-
-                  <Field
-                    label="Landmark"
-                    name="landmark"
-                    value={address.landmark || ""}
-                    onChange={handleAddressChange}
-                    className={`${inputClass} ${isLoadingAddress ? disabledInputClass : ""}`}
-                    disabled={isLoadingAddress}
-                    placeholder="e.g., Near Metro Station"
-                    required={false}
-                  />
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <Field
-                      label="Area/Neighbourhood"
-                      name="area"
-                      value={address.area || ""}
-                      onChange={handleAddressChange}
-                      className={`${inputClass} ${isLoadingAddress ? disabledInputClass : ""}`}
-                      disabled={isLoadingAddress}
-                      required={false}
-                    />
-                    <Field
-                      label="City"
-                      required
-                      name="city"
-                      value={address.city}
-                      onChange={handleAddressChange}
-                      className={`${inputClass} ${isLoadingAddress ? disabledInputClass : ""}`}
-                      disabled={isLoadingAddress}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Field
-                      label="State"
-                      required
-                      name="state"
-                      value={address.state}
-                      onChange={handleAddressChange}
-                      className={`${inputClass} ${isLoadingAddress ? disabledInputClass : ""}`}
-                      disabled={isLoadingAddress}
-                    />
-                    <Field
-                      label="Pincode"
-                      required
-                      name="pincode"
-                      value={address.pincode}
-                      onChange={handleAddressChange}
-                      className={`${inputClass} ${isLoadingAddress ? disabledInputClass : ""}`}
-                      disabled={isLoadingAddress}
-                    />
-                  </div>
-                </section>
-
-                <section className="space-y-5 border-t border-slate-200/80 pt-6 dark:border-zinc-800">
-                  <h2 className="text-base font-semibold">Vehicle</h2>
-                  <div>
-                    <p className="mb-2 text-sm font-medium">
-                      Vehicle type <span className="text-red-500">*</span>
-                    </p>
-                    <div className="grid grid-cols-4 gap-2">
-                      {VEHICLE_TYPES.map((item) => (
-                        <button
-                          key={item.value}
-                          type="button"
-                          onClick={() => setFormdata((prev) => ({ ...prev, vehicleType: item.value }))}
-                          className={`h-10 rounded-xl text-sm font-semibold transition ${
-                            formdata.vehicleType === item.value
-                              ? "bg-slate-950 text-white dark:bg-white dark:text-zinc-950"
-                              : "border border-slate-300 text-slate-700 dark:border-zinc-700 dark:text-zinc-300"
-                          }`}
-                        >
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <Field
-                    label="Vehicle number"
-                    required
-                    name="vehicleNumber"
-                    value={formdata.vehicleNumber}
-                    onChange={handleChange}
-                    className={inputClass}
-                    placeholder="DL01AB1234"
-                  />
-                  <Field
-                    label="Working radius (km)"
-                    required
-                    name="workingRadius"
-                    type="number"
-                    value={formdata.workingRadius}
-                    onChange={handleChange}
-                    className={inputClass}
-                  />
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <PhotoField
-                      label="RC photo"
-                      preview={rcPreview}
-                      onChange={(file) => handleFile("rc", file)}
-                    />
-                    <PhotoField
-                      label="License photo"
-                      preview={licensePreview}
-                      onChange={(file) => handleFile("license", file)}
-                    />
-                  </div>
-                </section>
-
-                <div className="flex justify-end gap-3 border-t border-slate-200/80 pt-6 dark:border-zinc-800">
-                  <Link
-                    href="/login"
-                    className="inline-flex h-10 items-center rounded-xl border border-slate-300 px-4 text-sm font-medium text-slate-700 dark:border-zinc-700 dark:text-zinc-300"
-                  >
-                    Cancel
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={handleSubmit}
-                    disabled={isSubmitting}
-                    className={`inline-flex h-10 min-w-36 items-center justify-center rounded-xl px-5 text-sm font-semibold text-white ${
-                      isSubmitting ? "cursor-not-allowed bg-emerald-400" : "bg-emerald-600 hover:bg-emerald-700"
-                    }`}
-                  >
-                    {isSubmitting ? "Submitting..." : "Submit for approval"}
-                  </button>
-                </div>
+          <section className="mt-8 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">Home address</h2>
+              <div className="flex gap-2">
+                <button type="button" disabled={isLoadingAddress} onClick={() => handleUseCurrent("home")} className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+                  Use GPS
+                </button>
+                <button type="button" onClick={() => setPickerTarget("home")} className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+                  Map
+                </button>
               </div>
             </div>
-          </>
-        )}
+            <AddressSummary address={homeAddress} location={homeLocation} />
+          </section>
+
+          <section className="mt-8 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">Work area</h2>
+              <label className="inline-flex items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  checked={workSameAsHome}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setWorkSameAsHome(checked);
+                    if (checked && homeLocation) {
+                      setWorkLocation(homeLocation);
+                      setWorkAddress(homeAddress);
+                    }
+                  }}
+                  className="h-4 w-4 rounded border-slate-300 text-emerald-600"
+                />
+                Same as home
+              </label>
+            </div>
+
+            {workSameAsHome ? (
+              <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300">
+                Work hub will use your home pin. You can change this later on Profile.
+              </p>
+            ) : (
+              <>
+                <div className="flex justify-end gap-2">
+                  <button type="button" disabled={isLoadingAddress} onClick={() => handleUseCurrent("work")} className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+                    Use GPS
+                  </button>
+                  <button type="button" onClick={() => setPickerTarget("work")} className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+                    Map
+                  </button>
+                </div>
+                <AddressSummary address={workAddress} location={workLocation} />
+              </>
+            )}
+          </section>
+
+          <div className="mt-8 flex justify-end gap-3 border-t border-slate-200 pt-6 dark:border-zinc-800">
+            <Link href="/login" className="inline-flex h-11 items-center rounded-xl border border-slate-300 px-4 text-sm font-medium dark:border-zinc-700">
+              Cancel
+            </Link>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="inline-flex h-11 min-w-40 items-center justify-center rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+            >
+              {isSubmitting ? "Creating..." : "Create account"}
+            </button>
+          </div>
+        </div>
       </div>
 
-      {showMapPicker ? (
+      {pickerTarget ? (
         <AddressLocationPicker
-          defaultPosition={location}
-          onClose={() => setShowMapPicker(false)}
-          onConfirm={({ lat, lng, address: nextAddress }) => {
-            applyPickedLocation(lat, lng, nextAddress);
-            setShowMapPicker(false);
+          defaultPosition={pickerTarget === "home" ? homeLocation : workLocation}
+          onClose={() => setPickerTarget(null)}
+          onConfirm={({ lat, lng, address }) => {
+            if (pickerTarget === "home") applyHome(lat, lng, address);
+            else applyWork(lat, lng, address);
+            setPickerTarget(null);
           }}
         />
       ) : null}
     </main>
   );
+}
+
+function Field({
+  label,
+  name,
+  value,
+  onChange,
+  type = "text",
+  className,
+}: {
+  label: string;
+  name: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  className: string;
+}) {
+  return (
+    <label className="block text-sm">
+      <span className="mb-1.5 block font-medium text-slate-600 dark:text-zinc-400">{label}</span>
+      <input
+        name={name}
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={className}
+      />
+    </label>
+  );
+}
+
+function AddressSummary({
+  address,
+  location,
+}: {
+  address: Address;
+  location: { lat: number; lng: number } | null;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm dark:border-zinc-700 dark:bg-zinc-950">
+      {location ? (
+        <>
+          <p className="leading-6 text-slate-800 dark:text-zinc-200">
+            {address.formatted || [address.area, address.city, address.state, address.pincode].filter(Boolean).join(", ") || "Pinned"}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            {location.lat.toFixed(5)}, {location.lng.toFixed(5)}
+          </p>
+        </>
+      ) : (
+        <p className="text-slate-500">No location yet — use GPS or map.</p>
+      )}
+    </div>
+  );
+}
+
+function isAddressReady(address: Address) {
+  return Boolean(address.formatted && address.city && address.state && address.pincode);
+}
+
+function payloadAddress(address: Address) {
+  return {
+    formatted: address.formatted,
+    line1: address.line1 || address.formatted,
+    state: address.state,
+    city: address.city,
+    pincode: address.pincode,
+    area: address.area,
+    landmark: address.landmark || undefined,
+  };
 }
 
 async function waitForGoogleGeocoder(timeoutMs = 10000) {
@@ -477,81 +330,6 @@ async function waitForGoogleGeocoder(timeoutMs = 10000) {
     if (Date.now() - started > timeoutMs) {
       throw new Error("Google Maps failed to load. Open the map picker instead.");
     }
-    await new Promise((resolve) => setTimeout(resolve, 120));
+    await new Promise((r) => setTimeout(r, 100));
   }
-}
-
-function Field({
-  label,
-  name,
-  value,
-  onChange,
-  className,
-  type = "text",
-  required = true,
-  disabled,
-  maxLength,
-  placeholder,
-}: {
-  label: string;
-  name: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
-  className: string;
-  type?: string;
-  required?: boolean;
-  disabled?: boolean;
-  maxLength?: number;
-  placeholder?: string;
-}) {
-  return (
-    <div>
-      <label className="mb-2 block text-sm font-medium">
-        {label} {required ? <span className="text-red-500">*</span> : null}
-      </label>
-      <input
-        type={type}
-        name={name}
-        value={value}
-        onChange={onChange}
-        required={required}
-        disabled={disabled}
-        maxLength={maxLength}
-        placeholder={placeholder}
-        className={className}
-      />
-    </div>
-  );
-}
-
-function PhotoField({
-  label,
-  preview,
-  onChange,
-}: {
-  label: string;
-  preview: string;
-  onChange: (file: File | null) => void;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-2 block text-sm font-medium">
-        {label} <span className="text-red-500">*</span>
-      </span>
-      <span className="flex min-h-36 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-400">
-        {preview ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={preview} alt={label} className="h-36 w-full object-cover" />
-        ) : (
-          <span>Tap to upload</span>
-        )}
-      </span>
-      <input
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(e) => onChange(e.target.files?.[0] || null)}
-      />
-    </label>
-  );
 }

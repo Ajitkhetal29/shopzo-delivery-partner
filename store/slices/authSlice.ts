@@ -8,19 +8,33 @@ export type VehicleDetails = {
   licensePhoto?: string;
 };
 
+export type AadhaarDetails = {
+  number?: string;
+  frontPhoto?: string;
+  backPhoto?: string;
+  submittedAt?: string | null;
+};
+
 export type DeliveryAgent = {
   _id: string;
   name: string;
   email?: string;
   contact?: string;
   shopzoDeliveryId?: string;
+  homeLocation?: { lat: number; lng: number };
+  homeAddress?: Address;
+  workSameAsHome?: boolean;
   location?: { lat: number; lng: number };
   address?: Address;
   vehicleDetails?: VehicleDetails;
+  aadhaar?: AadhaarDetails;
   workingRadius?: number;
   dutyMode?: boolean;
   isActive?: boolean;
-  approvalStatus?: string;
+  approvalStatus?: "incomplete" | "pending" | "approved" | "rejected" | string;
+  kycSubmittedAt?: string | null;
+  rejectionReason?: string | null;
+  approvedAt?: string | null;
 };
 
 type AuthState = {
