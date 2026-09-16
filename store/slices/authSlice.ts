@@ -1,15 +1,18 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import type { Address } from "@/store/types/address";
 
-export type DeliveryAddress = {
-  formatted?: string;
-  line1?: string;
-  city?: string;
-  state?: string;
-  pincode?: string;
-  area?: string;
-  country?: string;
-  landmark?: string;
-  location?: { lat: number; lng: number };
+export type VehicleDetails = {
+  vehicleType?: "bike" | "car" | "truck" | "other";
+  vehicleNumber?: string;
+  vehicleRcPhoto?: string;
+  licensePhoto?: string;
+};
+
+export type AadhaarDetails = {
+  number?: string;
+  frontPhoto?: string;
+  backPhoto?: string;
+  submittedAt?: string | null;
 };
 
 export type DeliveryAgent = {
@@ -18,22 +21,32 @@ export type DeliveryAgent = {
   email?: string;
   contact?: string;
   shopzoDeliveryId?: string;
+  homeLocation?: { lat: number; lng: number };
+  homeAddress?: Address;
+  workSameAsHome?: boolean;
   location?: { lat: number; lng: number };
-  address?: DeliveryAddress;
+  address?: Address;
+  vehicleDetails?: VehicleDetails;
+  aadhaar?: AadhaarDetails;
   workingRadius?: number;
   dutyMode?: boolean;
   isActive?: boolean;
-  approvalStatus?: string;
+  approvalStatus?: "incomplete" | "pending" | "approved" | "rejected" | string;
+  kycSubmittedAt?: string | null;
+  rejectionReason?: string | null;
+  approvedAt?: string | null;
 };
 
 type AuthState = {
   agent: DeliveryAgent | null;
   isAuthenticated: boolean;
+  isHydrated: boolean;
 };
 
 const initialState: AuthState = {
   agent: null,
   isAuthenticated: false,
+  isHydrated: false,
 };
 
 const authSlice = createSlice({
@@ -44,12 +57,19 @@ const authSlice = createSlice({
       state.agent = action.payload;
       state.isAuthenticated = true;
     },
+    patchAgent(state, action: PayloadAction<Partial<DeliveryAgent>>) {
+      if (!state.agent) return;
+      state.agent = { ...state.agent, ...action.payload };
+    },
     logout(state) {
       state.agent = null;
       state.isAuthenticated = false;
     },
+    setHydrated(state) {
+      state.isHydrated = true;
+    },
   },
 });
 
-export const { setAgent, logout } = authSlice.actions;
+export const { setAgent, patchAgent, logout, setHydrated } = authSlice.actions;
 export default authSlice.reducer;

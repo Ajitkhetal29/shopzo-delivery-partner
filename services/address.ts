@@ -1,10 +1,25 @@
 import { Address } from "@/store/types/address";
 
-const mapGoogleComponentsToAddress = (result: google.maps.GeocoderResult): Address => {
+type GoogleAddressComponent = {
+  long_name: string;
+  types: string[];
+};
+
+type GoogleGeocodeResult = {
+  formatted_address?: string;
+  address_components?: GoogleAddressComponent[];
+};
+
+const mapGoogleComponentsToAddress = (result: GoogleGeocodeResult): Address => {
   const components = result.address_components || [];
 
   const getComp = (...types: string[]) =>
     components.find((component) => types.some((type) => component.types.includes(type)))?.long_name || "";
+
+  const streetNumber = getComp("street_number");
+  const route = getComp("route");
+  const line1 =
+    [streetNumber, route].filter(Boolean).join(" ") || result.formatted_address?.split(",")[0]?.trim() || "";
 
   const city =
     getComp("locality") ||
@@ -14,6 +29,7 @@ const mapGoogleComponentsToAddress = (result: google.maps.GeocoderResult): Addre
 
   return {
     formatted: result.formatted_address || "",
+    line1,
     state: getComp("administrative_area_level_1"),
     city,
     pincode: getComp("postal_code"),
@@ -63,3 +79,21 @@ export const getAddress = async ({ lat, lng }: { lat: number; lng: number }): Pr
     return null;
   }
 };
+
+export const getDeviceLocation = () =>
+  new Promise<{ lat: number; lng: number }>((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Geolocation is not supported on this device"));
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      () => {
+        reject(new Error("Unable to fetch current location"));
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+    );
+  });

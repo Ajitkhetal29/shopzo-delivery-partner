@@ -1,12 +1,8 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import {
-  Autocomplete,
-  GoogleMap,
-  MarkerF,
-  useJsApiLoader,
-} from "@react-google-maps/api";
+import { Autocomplete, GoogleMap, MarkerF, useJsApiLoader } from "@react-google-maps/api";
+import { GOOGLE_MAPS_LOADER_OPTIONS } from "@/lib/googleMaps";
 
 type Props = {
   onLocationSelect: (lat: number, lng: number) => void;
@@ -14,9 +10,9 @@ type Props = {
 };
 
 const DEFAULT_CENTER = { lat: 20.5937, lng: 78.9629 };
-const MAP_LIBRARIES: ("places")[] = ["places"];
 
 export default function MapPicker({ onLocationSelect, defaultPosition }: Props) {
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
   const [position, setPosition] = useState<{ lat: number; lng: number } | null>(
     defaultPosition ? { lat: defaultPosition[0], lng: defaultPosition[1] } : null,
   );
@@ -25,10 +21,7 @@ export default function MapPicker({ onLocationSelect, defaultPosition }: Props) 
   const mapRef = useRef<google.maps.Map | null>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
-  const { isLoaded } = useJsApiLoader({
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
-    libraries: MAP_LIBRARIES,
-  });
+  const { isLoaded, loadError } = useJsApiLoader(GOOGLE_MAPS_LOADER_OPTIONS);
 
   const effectivePosition = useMemo(() => {
     if (position) return position;
@@ -43,7 +36,7 @@ export default function MapPicker({ onLocationSelect, defaultPosition }: Props) 
     onLocationSelect(lat, lng);
     if (mapRef.current) {
       mapRef.current.panTo({ lat, lng });
-      mapRef.current.setZoom(15);
+      mapRef.current.setZoom(16);
     }
   };
 
@@ -61,11 +54,11 @@ export default function MapPicker({ onLocationSelect, defaultPosition }: Props) 
         updateLocation(pos.coords.latitude, pos.coords.longitude);
         setLoading(false);
       },
-      (err) => {
-        console.error(err);
+      () => {
         alert("Unable to fetch location");
         setLoading(false);
       },
+      { enableHighAccuracy: true, timeout: 15000 },
     );
   };
 
@@ -74,31 +67,48 @@ export default function MapPicker({ onLocationSelect, defaultPosition }: Props) 
     const place = autocompleteRef.current.getPlace();
     const location = place.geometry?.location;
     if (!location) return;
-    const lat = location.lat();
-    const lng = location.lng();
-    updateLocation(lat, lng);
+    updateLocation(location.lat(), location.lng());
     setSearchValue(place.formatted_address || place.name || "");
   };
 
+  if (!apiKey) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-slate-50 px-6 text-center dark:bg-zinc-900">
+        <p className="text-sm text-slate-600 dark:text-zinc-400">
+          Add <code className="font-semibold">NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> and restart the app.
+        </p>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-slate-50 px-6 text-center dark:bg-zinc-900">
+        <p className="text-sm text-red-600">Map failed to load. Check Places API + key restrictions.</p>
+      </div>
+    );
+  }
+
   if (!isLoaded) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-zinc-50 text-sm text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
+      <div className="flex h-full w-full items-center justify-center bg-slate-50 text-sm text-slate-500 dark:bg-zinc-900 dark:text-zinc-400">
         Loading map...
       </div>
     );
   }
 
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-md">
+    <div className="relative h-full w-full overflow-hidden">
       {loading ? (
-        <div className="absolute inset-0 z-[1000] flex items-center justify-center rounded-md bg-white/95 backdrop-blur-sm">
+        <div className="absolute inset-0 z-[1000] flex items-center justify-center bg-white/95 backdrop-blur-sm dark:bg-zinc-950/80">
           <div className="text-center">
-            <div className="mb-2 inline-block h-8 w-8 animate-spin rounded-full border-b-2 border-emerald-600" />
-            <p className="text-sm font-medium text-gray-700">Fetching your location...</p>
+            <div className="mx-auto mb-2 h-8 w-8 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
+            <p className="text-sm font-medium text-slate-700 dark:text-zinc-200">Fetching your location...</p>
           </div>
         </div>
       ) : null}
-      <div className="absolute left-4 right-32 top-4 z-[2000] max-w-xl">
+
+      <div className="absolute left-3 right-[8.5rem] top-3 z-[2000] sm:left-4 sm:right-40 sm:top-4">
         <Autocomplete
           onLoad={(autocomplete) => {
             autocompleteRef.current = autocomplete;
@@ -109,8 +119,8 @@ export default function MapPicker({ onLocationSelect, defaultPosition }: Props) 
             type="text"
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
-            placeholder="Search location"
-            className="h-11 w-full rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-md outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30"
+            placeholder="Search area, landmark, or address"
+            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 shadow-md outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
           />
         </Autocomplete>
       </div>
@@ -119,19 +129,20 @@ export default function MapPicker({ onLocationSelect, defaultPosition }: Props) 
         type="button"
         onClick={handleUseMyLocation}
         disabled={loading}
-        className="absolute right-4 top-4 z-[2000] rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-md transition-all hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400"
+        className="absolute right-3 top-3 z-[2000] h-11 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-md transition hover:bg-slate-50 disabled:text-slate-400 sm:right-4 sm:top-4 sm:px-4 sm:text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-800"
       >
-        {loading ? "Loading..." : "Use my location"}
+        {loading ? "Locating..." : "My location"}
       </button>
 
       <GoogleMap
         center={mapCenter}
-        zoom={effectivePosition ? 15 : 5}
+        zoom={effectivePosition ? 16 : 5}
         mapContainerClassName="h-full w-full"
         options={{
           streetViewControl: false,
           mapTypeControl: false,
           fullscreenControl: false,
+          clickableIcons: false,
         }}
         onLoad={(map) => {
           mapRef.current = map;
@@ -144,7 +155,19 @@ export default function MapPicker({ onLocationSelect, defaultPosition }: Props) 
           }
         }}
       >
-        {effectivePosition ? <MarkerF position={effectivePosition} /> : null}
+        {effectivePosition ? (
+          <MarkerF
+            position={effectivePosition}
+            draggable
+            onDragEnd={(e) => {
+              const lat = e.latLng?.lat();
+              const lng = e.latLng?.lng();
+              if (typeof lat === "number" && typeof lng === "number") {
+                updateLocation(lat, lng);
+              }
+            }}
+          />
+        ) : null}
       </GoogleMap>
     </div>
   );
