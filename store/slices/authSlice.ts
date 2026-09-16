@@ -1,5 +1,17 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
+export type DeliveryAddress = {
+  formatted?: string;
+  line1?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  area?: string;
+  country?: string;
+  landmark?: string;
+  location?: { lat: number; lng: number };
+};
+
 export type DeliveryAgent = {
   _id: string;
   name: string;
@@ -7,6 +19,7 @@ export type DeliveryAgent = {
   contact?: string;
   shopzoDeliveryId?: string;
   location?: { lat: number; lng: number };
+  address?: DeliveryAddress;
   workingRadius?: number;
   dutyMode?: boolean;
   isActive?: boolean;
