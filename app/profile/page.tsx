@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import axios from "axios";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
@@ -9,20 +10,11 @@ import { usePartnerLogout } from "@/app/components/AppChrome";
 import { API_ENDPOINTS } from "@/lib/api";
 import { card } from "@/lib/delivery-ui";
 import { formatAddressLine } from "@/lib/kyc";
-import { uploadDeliveryDoc } from "@/lib/s3Upload";
 import { RootState } from "@/store";
 import { setAgent } from "@/store/slices/authSlice";
 import type { Address } from "@/store/types/address";
 
-type EditPanel = "radius" | "area" | "home" | "details" | "kyc" | null;
-type VehicleType = "bike" | "car" | "truck" | "other";
-
-const VEHICLE_TYPES: { value: VehicleType; label: string }[] = [
-  { value: "bike", label: "Bike" },
-  { value: "car", label: "Car" },
-  { value: "truck", label: "Truck" },
-  { value: "other", label: "Other" },
-];
+type EditPanel = "radius" | "area" | "home" | "details" | null;
 
 export default function ProfilePage() {
   const dispatch = useDispatch();
@@ -45,23 +37,6 @@ export default function ProfilePage() {
     address: Address;
   } | null>(null);
 
-  const [kycForm, setKycForm] = useState({
-    aadhaarNumber: "",
-    vehicleType: "bike" as VehicleType,
-    vehicleNumber: "",
-    workingRadius: "20",
-  });
-  const [aadhaarFront, setAadhaarFront] = useState<File | null>(null);
-  const [aadhaarBack, setAadhaarBack] = useState<File | null>(null);
-  const [rcFile, setRcFile] = useState<File | null>(null);
-  const [licenseFile, setLicenseFile] = useState<File | null>(null);
-  const [previews, setPreviews] = useState({
-    front: "",
-    back: "",
-    rc: "",
-    license: "",
-  });
-
   useEffect(() => {
     if (!agent) return;
     setRadiusValue(String(agent.workingRadius || 20));
@@ -69,19 +44,6 @@ export default function ProfilePage() {
       name: agent.name || "",
       email: agent.email || "",
       contact: agent.contact || "",
-    });
-    setKycForm((s) => ({
-      ...s,
-      aadhaarNumber: agent.aadhaar?.number || "",
-      vehicleType: (agent.vehicleDetails?.vehicleType as VehicleType) || "bike",
-      vehicleNumber: agent.vehicleDetails?.vehicleNumber || "",
-      workingRadius: String(agent.workingRadius || 20),
-    }));
-    setPreviews({
-      front: agent.aadhaar?.frontPhoto || "",
-      back: agent.aadhaar?.backPhoto || "",
-      rc: agent.vehicleDetails?.vehicleRcPhoto || "",
-      license: agent.vehicleDetails?.licensePhoto || "",
     });
   }, [agent]);
 
@@ -108,16 +70,6 @@ export default function ProfilePage() {
     setPendingArea(null);
     setPendingHome(null);
     setShowMapPicker(null);
-  };
-
-  const setFile = (kind: "front" | "back" | "rc" | "license", file: File | null) => {
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    setPreviews((s) => ({ ...s, [kind]: url }));
-    if (kind === "front") setAadhaarFront(file);
-    if (kind === "back") setAadhaarBack(file);
-    if (kind === "rc") setRcFile(file);
-    if (kind === "license") setLicenseFile(file);
   };
 
   const saveRadius = async () => {
@@ -247,69 +199,6 @@ export default function ProfilePage() {
     }
   };
 
-  const submitKyc = async () => {
-    const aadhaarNumber = kycForm.aadhaarNumber.replace(/\s+/g, "");
-    if (!/^\d{12}$/.test(aadhaarNumber)) {
-      toast.error("Enter a valid 12-digit Aadhaar number");
-      return;
-    }
-    if (!aadhaarFront && !previews.front) {
-      toast.error("Upload Aadhaar front");
-      return;
-    }
-    if (!aadhaarBack && !previews.back) {
-      toast.error("Upload Aadhaar back");
-      return;
-    }
-    if (!kycForm.vehicleNumber.trim()) {
-      toast.error("Vehicle number is required");
-      return;
-    }
-    if (!rcFile && !previews.rc) {
-      toast.error("Upload RC photo");
-      return;
-    }
-    if (!licenseFile && !previews.license) {
-      toast.error("Upload license photo");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const [frontPhoto, backPhoto, vehicleRcPhoto, licensePhoto] = await Promise.all([
-        aadhaarFront ? uploadDeliveryDoc(aadhaarFront) : Promise.resolve(previews.front),
-        aadhaarBack ? uploadDeliveryDoc(aadhaarBack) : Promise.resolve(previews.back),
-        rcFile ? uploadDeliveryDoc(rcFile) : Promise.resolve(previews.rc),
-        licenseFile ? uploadDeliveryDoc(licenseFile) : Promise.resolve(previews.license),
-      ]);
-
-      const res = await axios.post(
-        API_ENDPOINTS.SUBMIT_KYC,
-        {
-          aadhaar: { number: aadhaarNumber, frontPhoto, backPhoto },
-          vehicleDetails: {
-            vehicleType: kycForm.vehicleType,
-            vehicleNumber: kycForm.vehicleNumber.trim(),
-            vehicleRcPhoto,
-            licensePhoto,
-          },
-          workingRadius: Number(kycForm.workingRadius) || 20,
-        },
-        { withCredentials: true }
-      );
-
-      if (res.data?.success && res.data.agent) {
-        dispatch(setAgent(res.data.agent));
-        toast.success(res.data.message || "KYC submitted");
-        closePanel();
-      } else toast.error(res.data?.message || "KYC submit failed");
-    } catch (error) {
-      toast.error(axiosMsg(error, "KYC submit failed"));
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <div className="space-y-6">
       <div className={`${card} p-6 lg:p-7`}>
@@ -324,13 +213,7 @@ export default function ProfilePage() {
               <div className="mt-3 flex flex-wrap gap-2">
                 <Badge
                   tone={
-                    status === "approved"
-                      ? "green"
-                      : status === "rejected"
-                        ? "red"
-                        : status === "pending"
-                          ? "amber"
-                          : "slate"
+                    status === "approved" ? "green" : status === "rejected" ? "red" : "amber"
                   }
                   label={status === "incomplete" ? "KYC incomplete" : status}
                 />
@@ -343,13 +226,12 @@ export default function ProfilePage() {
           </div>
           <div className="flex flex-wrap gap-2">
             {needsKyc ? (
-              <button
-                type="button"
-                onClick={() => openPanel(editPanel === "kyc" ? null : "kyc")}
-                className="h-11 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
+              <Link
+                href="/kyc"
+                className="inline-flex h-11 items-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
               >
-                {editPanel === "kyc" ? "Close KYC form" : "Complete KYC"}
-              </button>
+                {status === "rejected" ? "Fix KYC" : "Complete KYC"}
+              </Link>
             ) : null}
             <button
               type="button"
@@ -367,10 +249,24 @@ export default function ProfilePage() {
             </button>
           </div>
         </div>
-        {status === "rejected" && agent.rejectionReason ? (
-          <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
-            {agent.rejectionReason}
-          </p>
+
+        <OnboardingTrack status={status} />
+
+        {status === "incomplete" ? (
+          <div className="mt-4 rounded-xl border-2 border-amber-400 bg-amber-50 px-4 py-3 dark:border-amber-500/70 dark:bg-amber-950/40">
+            <p className="text-sm font-semibold text-amber-950 dark:text-amber-100">KYC not completed</p>
+            <p className="mt-1 text-sm text-amber-900 dark:text-amber-50/90">
+              Upload Aadhaar and vehicle documents. Jobs stay locked until ops approves you.
+            </p>
+          </div>
+        ) : null}
+        {status === "rejected" ? (
+          <div className="mt-4 rounded-xl border-2 border-red-300 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950/40">
+            <p className="text-sm font-semibold text-red-900 dark:text-red-100">KYC needs a fix</p>
+            <p className="mt-1 text-sm text-red-800 dark:text-red-50/90">
+              {agent.rejectionReason || "Update your documents and resubmit for ops review."}
+            </p>
+          </div>
         ) : null}
         {status === "pending" ? (
           <p className="mt-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-100">
@@ -378,70 +274,6 @@ export default function ProfilePage() {
           </p>
         ) : null}
       </div>
-
-      {editPanel === "kyc" && needsKyc ? (
-        <EditSheet
-          title="Complete KYC"
-          subtitle="Aadhaar + vehicle only. Home/work are already on file."
-          onClose={closePanel}
-          onSave={submitKyc}
-          saving={saving}
-          saveLabel="Submit for ops approval"
-        >
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-sm font-semibold">Aadhaar</h3>
-              <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                <Field
-                  label="Aadhaar number"
-                  value={kycForm.aadhaarNumber}
-                  onChange={(v) => setKycForm((s) => ({ ...s, aadhaarNumber: v }))}
-                  placeholder="12 digits"
-                />
-                <Field
-                  label="Working radius (km)"
-                  type="number"
-                  value={kycForm.workingRadius}
-                  onChange={(v) => setKycForm((s) => ({ ...s, workingRadius: v }))}
-                />
-                <PhotoField label="Aadhaar front" preview={previews.front} onChange={(f) => setFile("front", f)} />
-                <PhotoField label="Aadhaar back" preview={previews.back} onChange={(f) => setFile("back", f)} />
-              </div>
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold">Vehicle</h3>
-              <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                <label className="block text-sm sm:col-span-2">
-                  <span className="mb-1.5 block font-medium text-shop-muted">Type</span>
-                  <div className="flex flex-wrap gap-2">
-                    {VEHICLE_TYPES.map((v) => (
-                      <button
-                        key={v.value}
-                        type="button"
-                        onClick={() => setKycForm((s) => ({ ...s, vehicleType: v.value }))}
-                        className={`h-10 rounded-xl px-4 text-sm font-semibold ${
-                          kycForm.vehicleType === v.value
-                            ? "bg-emerald-600 text-white"
-                            : "border border-shop-border"
-                        }`}
-                      >
-                        {v.label}
-                      </button>
-                    ))}
-                  </div>
-                </label>
-                <Field
-                  label="Vehicle number"
-                  value={kycForm.vehicleNumber}
-                  onChange={(v) => setKycForm((s) => ({ ...s, vehicleNumber: v }))}
-                />
-                <PhotoField label="RC photo" preview={previews.rc} onChange={(f) => setFile("rc", f)} />
-                <PhotoField label="License photo" preview={previews.license} onChange={(f) => setFile("license", f)} />
-              </div>
-            </div>
-          </div>
-        </EditSheet>
-      ) : null}
 
       {editPanel === "details" ? (
         <EditSheet title="Edit account details" subtitle="Name, email, mobile only." onClose={closePanel} onSave={saveDetails} saving={saving}>
@@ -702,36 +534,6 @@ function Field({
   );
 }
 
-function PhotoField({
-  label,
-  preview,
-  onChange,
-}: {
-  label: string;
-  preview: string;
-  onChange: (file: File | null) => void;
-}) {
-  return (
-    <label className="block text-sm">
-      <span className="mb-1.5 block font-medium text-shop-muted">{label}</span>
-      <div className="overflow-hidden rounded-xl border border-dashed border-shop-border">
-        {preview ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={preview} alt={label} className="h-36 w-full object-cover" />
-        ) : (
-          <div className="flex h-36 items-center justify-center text-xs text-shop-muted">Upload {label}</div>
-        )}
-        <input
-          type="file"
-          accept="image/*"
-          className="w-full border-t border-shop-border px-3 py-2 text-xs"
-          onChange={(e) => onChange(e.target.files?.[0] || null)}
-        />
-      </div>
-    </label>
-  );
-}
-
 function ReadOnlyBox({
   label,
   value,
@@ -769,6 +571,108 @@ function Row({ label, value }: { label: string; value: string }) {
     <div className="flex items-start justify-between gap-4 border-b border-shop-border/70 pb-3 last:border-0 last:pb-0">
       <dt className="text-shop-muted">{label}</dt>
       <dd className="text-right font-medium capitalize">{value}</dd>
+    </div>
+  );
+}
+
+type StepState = "done" | "current" | "upcoming" | "failed";
+
+function onboardingSteps(status: string): { label: string; hint: string; state: StepState }[] {
+  const kyc: StepState =
+    status === "incomplete" ? "current" : status === "rejected" ? "current" : "done";
+  const approval: StepState =
+    status === "approved"
+      ? "done"
+      : status === "pending"
+        ? "current"
+        : status === "rejected"
+          ? "failed"
+          : "upcoming";
+
+  return [
+    { label: "Signup", hint: "Account created", state: "done" },
+    {
+      label: "KYC",
+      hint:
+        status === "incomplete"
+          ? "Upload documents"
+          : status === "rejected"
+            ? "Resubmit documents"
+            : "Documents in",
+      state: kyc,
+    },
+    {
+      label: "Approval",
+      hint:
+        status === "approved"
+          ? "You can take jobs"
+          : status === "pending"
+            ? "Ops review"
+            : status === "rejected"
+              ? "Needs a fix"
+              : "After KYC",
+      state: approval,
+    },
+  ];
+}
+
+function OnboardingTrack({ status }: { status: string }) {
+  const steps = onboardingSteps(status);
+
+  return (
+    <div className="mt-6">
+      <div className="grid grid-cols-3">
+        {steps.map((step, index) => {
+          const prev = index > 0 ? steps[index - 1].state : null;
+          return (
+            <div key={step.label} className="relative flex flex-col items-center px-1 text-center">
+              {index > 0 ? (
+                <span
+                  className={`absolute top-3 right-1/2 left-0 h-0.5 -translate-y-1/2 ${
+                    prev === "done" ? "bg-emerald-500" : prev === "failed" ? "bg-red-400" : "bg-slate-200 dark:bg-zinc-700"
+                  }`}
+                />
+              ) : null}
+              {index < steps.length - 1 ? (
+                <span
+                  className={`absolute top-3 right-0 left-1/2 h-0.5 -translate-y-1/2 ${
+                    step.state === "done"
+                      ? "bg-emerald-500"
+                      : step.state === "failed"
+                        ? "bg-red-400"
+                        : "bg-slate-200 dark:bg-zinc-700"
+                  }`}
+                />
+              ) : null}
+              <span
+                className={`relative z-10 flex h-6 w-6 items-center justify-center rounded-full border-2 ${
+                  step.state === "done"
+                    ? "border-emerald-600 bg-emerald-600 text-white"
+                    : step.state === "current"
+                      ? "border-amber-500 bg-white ring-4 ring-amber-400/30 dark:bg-zinc-950"
+                      : step.state === "failed"
+                        ? "border-red-500 bg-red-500 text-white"
+                        : "border-slate-300 bg-white dark:border-zinc-600 dark:bg-zinc-950"
+                }`}
+              >
+                {step.state === "done" ? (
+                  <span className="text-[11px] font-bold leading-none">✓</span>
+                ) : step.state === "failed" ? (
+                  <span className="text-[11px] font-bold leading-none">!</span>
+                ) : (
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      step.state === "current" ? "bg-amber-500" : "bg-slate-300 dark:bg-zinc-600"
+                    }`}
+                  />
+                )}
+              </span>
+              <p className="mt-2 text-xs font-semibold">{step.label}</p>
+              <p className="mt-0.5 text-[11px] text-shop-muted">{step.hint}</p>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

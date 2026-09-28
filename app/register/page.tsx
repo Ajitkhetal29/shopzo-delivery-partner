@@ -122,7 +122,7 @@ export default function RegisterPage() {
 
       if (res.data.success && res.data.agent) {
         dispatch(setAgent(res.data.agent));
-        toast.success("Account created — complete KYC on Profile to take jobs.");
+        toast.success("Account created — complete KYC to take jobs.");
         router.push("/home");
       } else {
         toast.error(res.data.message || "Registration failed");
@@ -158,7 +158,7 @@ export default function RegisterPage() {
           </p>
           <h1 className="mt-2 text-2xl font-semibold tracking-tight">Create partner account</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-zinc-400">
-            Minimum details only. Aadhaar + vehicle docs come after login on Profile.
+            Minimum details only. Aadhaar and vehicle docs come after login.
           </p>
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2">

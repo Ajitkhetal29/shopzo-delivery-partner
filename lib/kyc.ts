@@ -23,9 +23,9 @@ export function getKycBanner(agent: {
     return {
       tone: "amber" as const,
       title: "Complete your KYC",
-      body: "Finish Aadhaar + vehicle docs on Profile. Ops can only approve after you submit.",
-      cta: "Go to Profile",
-      href: "/profile",
+      body: "Finish Aadhaar and vehicle documents. Ops can only approve after you submit.",
+      cta: "Complete KYC",
+      href: "/kyc",
     };
   }
 
@@ -45,9 +45,9 @@ export function getKycBanner(agent: {
       title: "KYC rejected",
       body:
         agent.rejectionReason ||
-        "Update your documents on Profile and resubmit for ops review.",
-      cta: "Fix on Profile",
-      href: "/profile",
+        "Update your documents and resubmit for ops review.",
+      cta: "Fix KYC",
+      href: "/kyc",
     };
   }
 

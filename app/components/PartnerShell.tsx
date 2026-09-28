@@ -60,8 +60,10 @@ export default function PartnerShell({ children, agent }: Props) {
     .join("");
 
   const pageTitle =
-    NAV.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))?.label ||
-    "Delivery";
+    pathname === "/kyc" || pathname.startsWith("/kyc/")
+      ? "KYC"
+      : NAV.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))?.label ||
+        "Delivery";
 
   return (
     <div className="flex h-dvh w-full overflow-hidden bg-shop-surface text-foreground">

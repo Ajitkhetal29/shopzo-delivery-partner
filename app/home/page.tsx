@@ -8,7 +8,8 @@ import { toast } from "react-toastify";
 import { API_ENDPOINTS } from "@/lib/api";
 import { card } from "@/lib/delivery-ui";
 import { canTakeJobs, getKycBanner } from "@/lib/kyc";
-import { SAMPLE_JOBS, SAMPLE_STATS } from "@/lib/sampleJobs";
+import { SAMPLE_STATS } from "@/lib/sampleJobs";
+import { JobCard, useAvailableJobs } from "@/app/components/AvailableJobs";
 import { RootState } from "@/store";
 import { setAgent } from "@/store/slices/authSlice";
 
@@ -22,6 +23,7 @@ export default function HomePage() {
   const approved = canTakeJobs(agent);
   const onDuty = Boolean(agent.dutyMode);
   const banner = getKycBanner(agent);
+  const { jobs, loading: jobsLoading } = useAvailableJobs(Boolean(approved && onDuty));
 
   const toggleDuty = async () => {
     if (!approved || savingDuty) return;
@@ -131,7 +133,7 @@ export default function HomePage() {
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold tracking-tight">Nearby jobs</h2>
-            <p className="text-sm text-shop-muted">Sample queue until live assignment is wired.</p>
+            <p className="text-sm text-shop-muted">Exact ₹ from your vehicle rate and trip km.</p>
           </div>
           <Link href="/jobs" className="text-sm font-semibold text-shop-accent hover:underline">
             See all
@@ -146,33 +148,18 @@ export default function HomePage() {
                 : "Go on duty to see nearby delivery jobs."}
             </p>
           </div>
+        ) : jobsLoading ? (
+          <div className={`${card} px-6 py-14 text-center`}>
+            <p className="text-sm font-medium text-shop-muted">Loading jobs…</p>
+          </div>
+        ) : jobs.length === 0 ? (
+          <div className={`${card} px-6 py-14 text-center`}>
+            <p className="text-sm font-medium text-shop-muted">No packed jobs in your radius right now.</p>
+          </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
-            {SAMPLE_JOBS.slice(0, 2).map((job) => (
-              <article key={job.id} className={`${card} p-5`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-shop-muted">
-                      {job.id}
-                    </p>
-                    <p className="mt-1 text-sm font-semibold">{job.pickup}</p>
-                    <p className="text-sm text-shop-muted">→ {job.drop}</p>
-                  </div>
-                  <p className="shrink-0 text-lg font-semibold text-emerald-700 dark:text-emerald-300">
-                    ₹{job.payout}
-                  </p>
-                </div>
-                <p className="mt-3 text-xs text-shop-muted">
-                  {job.distanceKm} km · {job.etaMin} min · {job.items} item{job.items > 1 ? "s" : ""}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => toast.info("Job assignment isn't wired yet")}
-                  className="mt-4 h-10 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
-                >
-                  Accept job
-                </button>
-              </article>
+            {jobs.slice(0, 2).map((job) => (
+              <JobCard key={job.id} job={job} />
             ))}
           </div>
         )}
