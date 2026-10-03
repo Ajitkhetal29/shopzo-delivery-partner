@@ -12,7 +12,7 @@ const SIDEBAR_KEY = "shopzo-delivery-sidebar-collapsed";
 
 const NAV = [
   { href: "/home", label: "Home", icon: HomeIcon },
-  { href: "/jobs", label: "Jobs", icon: JobsIcon },
+  { href: "/offers", label: "Offers", icon: JobsIcon },
   { href: "/profile", label: "Profile", icon: ProfileIcon },
 ];
 
@@ -62,8 +62,10 @@ export default function PartnerShell({ children, agent }: Props) {
   const pageTitle =
     pathname === "/kyc" || pathname.startsWith("/kyc/")
       ? "KYC"
-      : NAV.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))?.label ||
-        "Delivery";
+      : pathname === "/jobs" || pathname.startsWith("/offers")
+        ? "Offers"
+        : NAV.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))?.label ||
+          "Delivery";
 
   return (
     <div className="flex h-dvh w-full overflow-hidden bg-shop-surface text-foreground">

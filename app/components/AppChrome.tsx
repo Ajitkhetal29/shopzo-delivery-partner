@@ -9,7 +9,7 @@ import type { AppDispatch, RootState } from "@/store";
 import { logout, setAgent } from "@/store/slices/authSlice";
 import PartnerShell from "@/app/components/PartnerShell";
 
-const PUBLIC_PATHS = ["/login", "/register"];
+const PUBLIC_PATHS = ["/login", "/register", "/test"];
 
 const LogoutContext = createContext<() => void | Promise<void>>(() => undefined);
 

@@ -9,7 +9,6 @@ import { API_ENDPOINTS } from "@/lib/api";
 import { card } from "@/lib/delivery-ui";
 import { canTakeJobs, getKycBanner } from "@/lib/kyc";
 import { SAMPLE_STATS } from "@/lib/sampleJobs";
-import { JobCard, useAvailableJobs } from "@/app/components/AvailableJobs";
 import { RootState } from "@/store";
 import { setAgent } from "@/store/slices/authSlice";
 
@@ -23,7 +22,6 @@ export default function HomePage() {
   const approved = canTakeJobs(agent);
   const onDuty = Boolean(agent.dutyMode);
   const banner = getKycBanner(agent);
-  const { jobs, loading: jobsLoading } = useAvailableJobs(Boolean(approved && onDuty));
 
   const toggleDuty = async () => {
     if (!approved || savingDuty) return;
@@ -116,9 +114,7 @@ export default function HomePage() {
               </span>
             </button>
           ) : (
-            <p className="mt-5 text-sm text-shop-muted">
-              Duty mode unlocks after KYC approval.
-            </p>
+            <p className="mt-5 text-sm text-shop-muted">Duty mode unlocks after KYC approval.</p>
           )}
         </div>
 
@@ -129,40 +125,23 @@ export default function HomePage() {
         </div>
       </div>
 
-      <section>
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight">Nearby jobs</h2>
-            <p className="text-sm text-shop-muted">Exact ₹ from your vehicle rate and trip km.</p>
-          </div>
-          <Link href="/jobs" className="text-sm font-semibold text-shop-accent hover:underline">
-            See all
-          </Link>
+      <section className={`${card} flex flex-col gap-3 p-6 sm:flex-row sm:items-center sm:justify-between`}>
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">Job offers</h2>
+          <p className="mt-1 text-sm text-shop-muted">
+            {!approved
+              ? "Complete KYC to unlock offers."
+              : onDuty
+                ? "Packed jobs in your radius show up on Offers. Accept there."
+                : "Go on duty, then open Offers to accept jobs."}
+          </p>
         </div>
-
-        {!approved || !onDuty ? (
-          <div className={`${card} px-6 py-14 text-center`}>
-            <p className="text-sm font-medium text-shop-muted">
-              {!approved
-                ? "Complete KYC and get approved to see jobs."
-                : "Go on duty to see nearby delivery jobs."}
-            </p>
-          </div>
-        ) : jobsLoading ? (
-          <div className={`${card} px-6 py-14 text-center`}>
-            <p className="text-sm font-medium text-shop-muted">Loading jobs…</p>
-          </div>
-        ) : jobs.length === 0 ? (
-          <div className={`${card} px-6 py-14 text-center`}>
-            <p className="text-sm font-medium text-shop-muted">No packed jobs in your radius right now.</p>
-          </div>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2">
-            {jobs.slice(0, 2).map((job) => (
-              <JobCard key={job.id} job={job} />
-            ))}
-          </div>
-        )}
+        <Link
+          href="/offers"
+          className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white hover:bg-emerald-700"
+        >
+          See offers
+        </Link>
       </section>
     </div>
   );

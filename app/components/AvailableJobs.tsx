@@ -2,8 +2,9 @@
 
 import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
+import { io } from "socket.io-client";
 import { toast } from "react-toastify";
-import { API_ENDPOINTS } from "@/lib/api";
+import { API_ENDPOINTS, SOCKET_URL } from "@/lib/api";
 import { card } from "@/lib/delivery-ui";
 
 export type AvailableJob = {
@@ -32,6 +33,11 @@ const getCurrentPoint = (): Promise<{ lat: number; lng: number } | null> =>
 export function useAvailableJobs(enabled: boolean) {
   const [jobs, setJobs] = useState<AvailableJob[]>([]);
   const [loading, setLoading] = useState(false);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
+
+  const dropJob = useCallback((jobId: string) => {
+    setJobs((prev) => prev.filter((job) => job.id !== jobId));
+  }, []);
 
   const load = useCallback(async () => {
     if (!enabled) {
@@ -46,12 +52,12 @@ export function useAvailableJobs(enabled: boolean) {
         params: here || undefined,
       });
       if (res.data?.success) setJobs(res.data.jobs || []);
-      else toast.error(res.data?.message || "Could not load jobs");
+      else toast.error(res.data?.message || "Could not load offers");
     } catch (error: unknown) {
       const message =
         axios.isAxiosError(error) && error.response?.data?.message
           ? error.response.data.message
-          : "Could not load jobs";
+          : "Could not load offers";
       toast.error(message);
       setJobs([]);
     } finally {
@@ -63,10 +69,60 @@ export function useAvailableJobs(enabled: boolean) {
     load();
   }, [load]);
 
-  return { jobs, loading, reload: load };
+  useEffect(() => {
+    if (!enabled) return;
+
+    const socket = io(SOCKET_URL, { withCredentials: true });
+
+    socket.on("job-taken", (payload: { jobId?: string }) => {
+      if (payload?.jobId) dropJob(payload.jobId);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [enabled, dropJob]);
+
+  const acceptJob = async (jobId: string) => {
+    if (acceptingId) return;
+    setAcceptingId(jobId);
+    try {
+      const res = await axios.post(
+        `${API_ENDPOINTS.ACCEPT_JOB}/${jobId}/accept`,
+        {},
+        { withCredentials: true }
+      );
+      if (res.data?.success) {
+        dropJob(jobId);
+        toast.success("Job accepted");
+      } else {
+        toast.error(res.data?.message || "Could not accept job");
+      }
+    } catch (error: unknown) {
+      const status = axios.isAxiosError(error) ? error.response?.status : null;
+      const message =
+        axios.isAxiosError(error) && error.response?.data?.message
+          ? error.response.data.message
+          : "Could not accept job";
+      if (status === 409) dropJob(jobId);
+      toast.error(message);
+    } finally {
+      setAcceptingId(null);
+    }
+  };
+
+  return { jobs, loading, acceptingId, acceptJob };
 }
 
-export function JobCard({ job }: { job: AvailableJob }) {
+export function JobCard({
+  job,
+  onAccept,
+  accepting,
+}: {
+  job: AvailableJob;
+  onAccept: (jobId: string) => void;
+  accepting: boolean;
+}) {
   const route = job.badge || [job.pickupArea, job.dropoffArea].filter(Boolean).join(" → ") || "Delivery";
 
   return (
@@ -86,10 +142,11 @@ export function JobCard({ job }: { job: AvailableJob }) {
       </div>
       <button
         type="button"
-        onClick={() => toast.info("Accept isn't wired yet")}
-        className="mt-4 h-10 w-full rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
+        disabled={accepting}
+        onClick={() => onAccept(job.id)}
+        className="mt-4 h-10 w-full rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
       >
-        Accept job
+        {accepting ? "Accepting…" : "Accept job"}
       </button>
     </article>
   );

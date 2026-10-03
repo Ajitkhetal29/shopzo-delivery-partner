@@ -16,5 +16,8 @@ export const API_ENDPOINTS = {
   UPDATE_HOME_ADDRESS: `${API_BASE_URL}/delivery-agent/home-address`,
   UPDATE_PROFILE: `${API_BASE_URL}/delivery-agent/profile`,
   AVAILABLE_JOBS: `${API_BASE_URL}/delivery-agent/jobs/available`,
+  ACCEPT_JOB: `${API_BASE_URL}/delivery-agent/jobs`,
   GENERATE_UPLOAD_URL: `${API_BASE_URL}/upload/generate-upload-url`,
 };
+
+export const SOCKET_URL = API_BASE_URL.replace(/\/api$/, "");
