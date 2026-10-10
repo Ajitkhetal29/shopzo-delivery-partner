@@ -125,23 +125,37 @@ export default function HomePage() {
         </div>
       </div>
 
-      <section className={`${card} flex flex-col gap-3 p-6 sm:flex-row sm:items-center sm:justify-between`}>
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Job offers</h2>
-          <p className="mt-1 text-sm text-shop-muted">
-            {!approved
-              ? "Complete KYC to unlock offers."
-              : onDuty
-                ? "Packed jobs in your radius show up on Offers. Accept there."
-                : "Go on duty, then open Offers to accept jobs."}
-          </p>
+      <section className="grid gap-3 sm:grid-cols-2">
+        <div className={`${card} flex flex-col gap-3 p-6`}>
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Offers</h2>
+            <p className="mt-1 text-sm text-shop-muted">
+              {!approved
+                ? "Complete KYC to unlock offers."
+                : onDuty
+                  ? "Open jobs in your radius."
+                  : "Go on duty, then take offers."}
+            </p>
+          </div>
+          <Link
+            href="/offers"
+            className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white hover:bg-emerald-700"
+          >
+            See offers
+          </Link>
         </div>
-        <Link
-          href="/offers"
-          className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white hover:bg-emerald-700"
-        >
-          See offers
-        </Link>
+        <div className={`${card} flex flex-col gap-3 p-6`}>
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Accepted</h2>
+            <p className="mt-1 text-sm text-shop-muted">Jobs you already claimed. Start one later.</p>
+          </div>
+          <Link
+            href="/accepted"
+            className="inline-flex h-11 items-center justify-center rounded-xl border border-shop-border px-5 text-sm font-semibold text-foreground hover:bg-neutral-100 dark:hover:bg-neutral-800"
+          >
+            See accepted
+          </Link>
+        </div>
       </section>
     </div>
   );

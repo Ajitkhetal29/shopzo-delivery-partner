@@ -17,6 +17,7 @@ export const API_ENDPOINTS = {
   UPDATE_PROFILE: `${API_BASE_URL}/delivery-agent/profile`,
   AVAILABLE_JOBS: `${API_BASE_URL}/delivery-agent/jobs/available`,
   ACCEPT_JOB: `${API_BASE_URL}/delivery-agent/jobs`,
+  MY_JOBS: `${API_BASE_URL}/delivery-agent/jobs/mine`,
   GENERATE_UPLOAD_URL: `${API_BASE_URL}/upload/generate-upload-url`,
 };
 

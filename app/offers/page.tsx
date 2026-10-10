@@ -11,14 +11,17 @@ export default function OffersPage() {
   const agent = useSelector((s: RootState) => s.auth.agent);
   const approved = agent ? canTakeJobs(agent) : false;
   const onDuty = Boolean(agent?.dutyMode);
-  const { jobs, loading, acceptingId, acceptJob } = useAvailableJobs(Boolean(approved && onDuty));
+  const { jobs, loading, acceptingId, acceptJob, notice, exiting } = useAvailableJobs(
+    Boolean(approved && onDuty),
+    agent?._id
+  );
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Offers</h1>
         <p className="mt-1 text-sm text-shop-muted">
-          Packed jobs in your work radius. ₹ is from ops rates × road trip km.
+          Packed jobs in your work radius. Accepted jobs move to Accepted.
         </p>
       </div>
 
@@ -63,6 +66,8 @@ export default function OffersPage() {
               job={job}
               onAccept={acceptJob}
               accepting={acceptingId === job.id}
+              notice={notice[job.id]}
+              exiting={exiting[job.id]}
             />
           ))}
         </div>

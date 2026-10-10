@@ -13,6 +13,7 @@ const SIDEBAR_KEY = "shopzo-delivery-sidebar-collapsed";
 const NAV = [
   { href: "/home", label: "Home", icon: HomeIcon },
   { href: "/offers", label: "Offers", icon: JobsIcon },
+  { href: "/accepted", label: "Accepted", icon: QueueIcon },
   { href: "/profile", label: "Profile", icon: ProfileIcon },
 ];
 
@@ -64,6 +65,10 @@ export default function PartnerShell({ children, agent }: Props) {
       ? "KYC"
       : pathname === "/jobs" || pathname.startsWith("/offers")
         ? "Offers"
+        : pathname.startsWith("/accepted")
+          ? "Accepted"
+          : pathname.startsWith("/run")
+            ? "Run"
         : NAV.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))?.label ||
           "Delivery";
 
@@ -268,6 +273,19 @@ function JobsIcon({ active }: { active: boolean }) {
         strokeLinejoin="round"
         strokeWidth={active ? 2.2 : 1.8}
         d="M7 7h10M7 12h10M7 17h6M4 5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5Z"
+      />
+    </svg>
+  );
+}
+
+function QueueIcon({ active }: { active: boolean }) {
+  return (
+    <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={active ? 2.2 : 1.8}
+        d="M4 6h16M4 12h16M4 18h10"
       />
     </svg>
   );

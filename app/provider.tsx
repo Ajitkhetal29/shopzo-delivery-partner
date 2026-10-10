@@ -7,6 +7,9 @@ import "react-toastify/dist/ReactToastify.css";
 import { ThemeProvider } from "@/app/components/theme-provider";
 import { RootState, store } from "@/store";
 import { setAgent, setHydrated } from "@/store/slices/authSlice";
+import axios from "axios";
+
+axios.defaults.headers.common["X-Shopzo-Panel"] = "delivery";
 
 const AGENT_STORAGE_KEY = "shopzo-delivery-agent";
 

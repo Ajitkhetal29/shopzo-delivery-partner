@@ -29,6 +29,7 @@ export type DeliveryAgent = {
   vehicleDetails?: VehicleDetails;
   aadhaar?: AadhaarDetails;
   workingRadius?: number;
+  maxActiveJobs?: number;
   dutyMode?: boolean;
   isActive?: boolean;
   approvalStatus?: "incomplete" | "pending" | "approved" | "rejected" | string;
